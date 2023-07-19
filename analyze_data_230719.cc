@@ -206,6 +206,8 @@ void analyze_data_230719(){
     double output_amplitudes[32];
     double output_charges[32];
     std::vector<int> output_STT_pulses[32];
+    std::vector<double> output_multi_areas[32];
+    std::vector<double> output_multi_amplitudes[32];
     for (int j=0; j<32; j++) {
         output_tree->Branch(Form("STT_times%d",j), &output_STT_times[j], Form("STT_times%d/D",j));
         output_tree->Branch(Form("CFD_times%d",j), &output_CFD_times[j], Form("CFD_times%d/D",j));
@@ -213,6 +215,8 @@ void analyze_data_230719(){
         output_tree->Branch(Form("charges%d",j), &output_charges[j], Form("charges%d/D",j));
         output_tree->Branch(Form("baselines%d",j), &output_baselines[j], Form("baselines%d/D",j));
         output_tree->Branch(Form("STT_multipeaks%d",j), &output_STT_pulses[j], Form("STT_multipeaks%d",j));
+        output_tree->Branch(Form("multi_areas%d",j), &output_multi_areas[j], Form("multi_areas%d",j));
+        output_tree->Branch(Form("multi_amplitudes%d",j), &output_multi_amplitudes[j], Form("multi_amplitudes%d",j));
     }
 
     // Initialize vectors for waveforms
@@ -251,10 +255,15 @@ void analyze_data_230719(){
         double CFD_times[32]; memset(CFD_times, 0., sizeof(double));
         double charges[32]; memset(charges, 0., sizeof(double));
         double amplitudes[32]; memset(amplitudes, 0., sizeof(double));
-        std::vector<int> pulses[32];
+        std::vector<int> pulses[32]; 
+        std::vector<double> multi_areas[32], multi_amplitudes[32];
         for (int j=0; j<32; j++) {
             output_STT_pulses[j].clear();
             pulses[j].clear();
+            multi_amplitudes[j].clear();
+            output_multi_amplitudes[j].clear();
+            multi_areas[j].clear();
+            output_multi_areas[j].clear();
         }
 
         // Make analysis
@@ -263,14 +272,37 @@ void analyze_data_230719(){
                 baselines[j]  = waveform_baseline(waveforms[j], baseline_samples);
                 STT_times[j]  = global_timing(waveforms[j], baselines[j], 0, 200);
                 CFD_times[j]  = CFD_timing(waveforms[j], baselines[j], STT_times[j], 0, 200, 0.1);
-                charges[j]    = pulse_charge(waveforms[j], baselines[j], STT_times[j], 20);
+                charges[j]    = pulse_charge(waveforms[j], baselines[j], STT_times[j], 5);
                 amplitudes[j] = waveforms[j]->at(STT_times[j]);
                 std::vector<int> temporary_pulses = count_pulses(waveforms[j], baselines[j], threshold);
-                for (int k=0; k < temporary_pulses.size(); k++) {
-                    pulses[j].push_back(temporary_pulses.at(k)); 
+                
+                // std::cout << "Amps: "  << amplitudes[j] << std::endl;
+                // std::cout << "Areas: " << charges[j] << std::endl;
+                if (temporary_pulses.size() > 1) {
+                    for (int k=0; k < temporary_pulses.size(); k++) {
+                        pulses[j].push_back(temporary_pulses.at(k));
+                        multi_amplitudes[j].push_back(waveforms[j]->at(temporary_pulses.at(k)));
+                        multi_areas[j].push_back(pulse_charge(waveforms[j], baselines[j], temporary_pulses.at(k), 5));
+                        // std::cout << "  Amps: " << waveforms[j]->at(temporary_pulses.at(k)) << std::endl;
+                        // std::cout << "  Areas: " << pulse_charge(waveforms[j], baselines[j], temporary_pulses.at(k), 5) << std::endl;
+                    } 
+                } else {
+                    pulses[j].push_back(STT_times[j]);
+                    multi_amplitudes[j].push_back(amplitudes[j]);
+                    multi_areas[j].push_back(charges[j]);
                 }
+
             }
         }
+
+        // //debug
+        // for (int j=0; j<32; j++) { 
+        //     std::cout << "Amps:" << std::endl;
+        //     for (int k=0; k < multi_amplitudes[j].size(); k++) {
+        //         std::cout << multi_amplitudes[j].at(k) << "  ";
+        //     }
+        //     std::cout << std::endl;
+        // }
 
     // Save pulse information to root file
         for (int j=0; j<32; j++) {
@@ -280,8 +312,22 @@ void analyze_data_230719(){
             output_charges[j]    = charges[j];
             output_amplitudes[j] = amplitudes[j];
             for (int k=0; k < pulses[j].size(); k++) {
-                output_STT_pulses[j].push_back(pulses[j].at(k));
+                // std::cout << k << std::endl;
+                // output_STT_pulses[j].push_back(pulses[j].at(k));
+                output_STT_pulses[j].push_back(15);
+                // output_multi_areas[j].push_back(multi_areas[j].at(k));
+                // output_multi_amplitudes[j].push_back(multi_amplitudes[j].at(k));
+                if (pulses[j].size() > 1 ) {
+                    std::cout << j << " " << k << " " << pulses[j].size() << " " << pulses[j].at(k) << " " << multi_areas[j].at(k) << " " << multi_amplitudes[j].at(k) << std::endl;
+                }
+                
             }
+            std::cout << std::endl;
+
+            // for (int k=0; k<pulses[j].size(); k++) {
+            //     std::cout << output_multi_areas[j].at(k) << std::endl;
+            // }
+
         }
         output_tree->Fill();
     }
